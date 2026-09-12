@@ -1,6 +1,6 @@
 import pytest
 
-from rag_chunker.chunker import chunk_markdown
+from rag_chunker.chunker import _split_list_items, chunk_markdown
 
 
 def test_single_short_section_is_one_chunk_with_heading_prefix():
@@ -68,3 +68,42 @@ def test_overlap_must_not_be_negative():
 def test_overlap_must_be_smaller_than_max_tokens():
     with pytest.raises(ValueError):
         chunk_markdown("text", max_tokens=10, overlap=10)
+
+
+def test_split_list_items_splits_unordered_bullets():
+    assert _split_list_items("- one\n- two\n- three") == ["- one", "- two", "- three"]
+
+
+def test_split_list_items_handles_star_and_plus_markers():
+    assert _split_list_items("* one\n+ two") == ["* one", "+ two"]
+
+
+def test_split_list_items_splits_ordered_dot_and_paren_markers():
+    assert _split_list_items("1. one\n2. two") == ["1. one", "2. two"]
+    assert _split_list_items("1) one\n2) two") == ["1) one", "2) two"]
+
+
+def test_split_list_items_keeps_wrapped_continuation_lines_attached():
+    assert _split_list_items("- one\n  continued\n- two") == ["- one\n  continued", "- two"]
+
+
+def test_list_block_packs_each_item_as_its_own_piece():
+    doc = "# H\n\n- one\n- two\n- three\n"
+    chunks = chunk_markdown(doc, max_tokens=512, overlap=0)
+    assert len(chunks) == 1
+    assert chunks[0].body == "- one\n- two\n- three"
+
+
+def test_ordered_list_block_packs_each_item_as_its_own_piece():
+    doc = "# H\n\n1. one\n2. two\n3. three\n"
+    chunks = chunk_markdown(doc, max_tokens=512, overlap=0)
+    assert len(chunks) == 1
+    assert chunks[0].body == "1. one\n2. two\n3. three"
+
+
+def test_list_items_split_across_chunks_when_they_do_not_fit_together():
+    doc = "# H\n\n- one\n- two\n- three\n"
+    chunks = chunk_markdown(doc, max_tokens=6, overlap=0)
+    assert len(chunks) > 1
+    for chunk in chunks:
+        assert chunk.body.count("\n") < 2
