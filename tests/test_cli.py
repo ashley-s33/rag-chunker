@@ -5,6 +5,7 @@ itself, so these only cover the argparse wiring and the stdout/stderr/file
 paths main() takes through it.
 """
 
+import io
 import json
 from pathlib import Path
 
@@ -13,6 +14,7 @@ import pytest
 from rag_chunker.cli import build_parser, main
 
 DOC_PATH = str(Path(__file__).parent / "fixtures" / "doc.md")
+DOC_TEXT = Path(DOC_PATH).read_text()
 
 
 def test_build_parser_defaults():
@@ -81,6 +83,19 @@ def test_main_rejects_overlap_not_smaller_than_max_tokens(capsys):
     with pytest.raises(SystemExit):
         main([DOC_PATH, "--max-tokens", "10", "--overlap", "10"])
     assert "overlap must be smaller than max_tokens" in capsys.readouterr().err
+
+
+def test_main_reads_from_stdin(monkeypatch, capsys):
+    monkeypatch.setattr("sys.stdin", io.StringIO(DOC_TEXT))
+    exit_code = main(["-"])
+    assert exit_code == 0
+
+    records = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert [r["heading_path"] for r in records] == [
+        ["Vector index runbook"],
+        ["Vector index runbook", "Reindex"],
+        ["Vector index runbook", "Checks"],
+    ]
 
 
 def test_main_rejects_missing_file(capsys):
