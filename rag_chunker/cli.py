@@ -91,6 +91,10 @@ def main(argv=None):
         text = _read_input(args.path)
     except OSError as error:
         parser.error(str(error))
+    except UnicodeDecodeError:
+        # A decode failure is a ValueError, not an OSError, so without this a
+        # binary file would surface as a traceback instead of a usage error.
+        parser.error("%s is not valid UTF-8 text" % ("stdin" if args.path == "-" else args.path))
 
     try:
         chunks = chunk_markdown(

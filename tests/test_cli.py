@@ -98,6 +98,41 @@ def test_main_reads_from_stdin(monkeypatch, capsys):
     ]
 
 
+def test_main_rejects_binary_file(tmp_path, capsys):
+    path = tmp_path / "blob.bin"
+    path.write_bytes(b"\x89PNG\r\n\x1a\n\xff\xfe\x00\x00")
+    with pytest.raises(SystemExit) as excinfo:
+        main([str(path)])
+    assert excinfo.value.code == 2
+    assert "is not valid UTF-8 text" in capsys.readouterr().err
+
+
+def test_main_rejects_binary_stdin(monkeypatch, capsys):
+    stream = io.TextIOWrapper(io.BytesIO(b"# ok\n\xff\xfe\x00bad"), encoding="utf-8")
+    monkeypatch.setattr("sys.stdin", stream)
+    with pytest.raises(SystemExit) as excinfo:
+        main(["-"])
+    assert excinfo.value.code == 2
+    err = capsys.readouterr().err
+    assert "stdin is not valid UTF-8 text" in err
+
+
+def test_main_stats_with_empty_input_reports_zero_chunks(monkeypatch, capsys):
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
+    exit_code = main(["-", "--stats"])
+    assert exit_code == 0
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "0 chunks\n"
+
+
+def test_main_array_with_empty_input_emits_empty_array(monkeypatch, capsys):
+    monkeypatch.setattr("sys.stdin", io.StringIO("\n\n"))
+    main(["-", "--array"])
+    assert json.loads(capsys.readouterr().out) == []
+
+
 def test_main_rejects_missing_file(capsys):
     with pytest.raises(SystemExit):
         main([str(Path(DOC_PATH).parent / "does-not-exist.md")])
